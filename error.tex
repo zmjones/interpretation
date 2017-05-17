@@ -1,0 +1,14 @@
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{trees,quotes,angles}
+\begin{document}
+\begin{tikzpicture}
+  \draw (0,0) circle [radius=5] node[scale=2] {$\mathcal{H}$};
+  \draw (2,1) node[circle,inner sep=5pt,draw,scale=1.125] (1) {$\hat{f}$} ;
+  \draw (3.076923077, -4) node[circle,inner sep=5pt,draw,scale=1.125] (2) {$h^* \in \mathcal{H}$};
+  \draw (8,-5) node[circle,inner sep=5pt,draw,scale=1.125] (3) {$f$};
+  \path (1) edge node {estimation error} (2);
+  \path (2) edge node {approximation error} (3);
+  \path (1) edge node {excess error} (3);
+\end{tikzpicture}
+\end{document}
