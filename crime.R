@@ -73,9 +73,13 @@ if (src.mod.time > data.mod.time) {
     mutate(Date = ymd(paste(Year, Month, Day, sep = "/")),
       Week = week(Date)) %>%
     group_by(Beat) %>%
-    mutate(MonthLag = rollapply(Incidence, width = 30 * 2, FUN = sum, fill = NA),
-      WeekLag = rollapply(Incidence, width = 7 * 2, FUN = sum, fill = NA),
-      DayLag = rollapply(Incidence, width = 1 * 2, FUN = sum, fill = NA)) %>%
+    mutate(
+      mutate(OneLag = lag(ifelse(Incidence, 1, 0), n = 1),
+      TwoLag = lag(OneLag, n = 1),
+      DayLag = OneLag + TwoLag,
+      MonthLag = rollapply(DayLag, width = 30 * 2, FUN = sum, fill = NA),
+      WeekLag = rollapply(DayLag, width = 7 * 2, FUN = sum, fill = NA)
+    ) %>%
     mutate(Weekday = wday(Date, label = TRUE),
       Month = month(Date, label = TRUE),
       Incidence = factor(Incidence > 0),
@@ -83,6 +87,7 @@ if (src.mod.time > data.mod.time) {
   fwrite(data, paste0(data_prefix, "replication.csv"))
 } else {
   data = fread(paste0(data_prefix, "replication.csv")) %>%
+    select(-V1) %>%
     mutate(Weekday = ordered(Weekday,
       levels = c("Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun")),
       TimeOfDay = as.factor(TimeOfDay),
@@ -90,8 +95,18 @@ if (src.mod.time > data.mod.time) {
       Month = ordered(Month,
         levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
           "Aug", "Sep", "Oct", "Nov", "Dec")),
-      Beat = as.factor(Beat))
+      Beat = as.factor(Beat),
+      DayLag = NULL, WeekLag = NULL, MonthLag = NULL) %>%
+    group_by(Beat) %>%
+    mutate(OneLag = lag(ifelse(Incidence, 1, 0), n = 1),
+      TwoLag = lag(OneLag, n = 1),
+      DayLag = OneLag + TwoLag,
+      MonthLag = rollapply(DayLag, width = 30 * 2, FUN = sum, fill = NA),
+      WeekLag = rollapply(DayLag, width = 7 * 2, FUN = sum, fill = NA),
+      OneLag = NULL, TwoLag = NULL)
 }
+
+data$OneLag = data$TwoLag = NULL
 
 ## date not used as a feature
 ## and i don't expect any day-of-month trends
@@ -107,11 +122,13 @@ data = data %>%
   select(-one_of("Date", "Day", "Week", "Beat")) %>%  
   as.data.frame()
 
+data$Incidence = as.factor(data$Incidence)
+
 if (src.mod.time > fit.mod.time) {
   load(paste0(dir_prefix, "results/fit.RData"))
 } else {
   fit = ranger(data = data,
-    num.trees = 1000L,
+    num.trees = 500L,
     mtry = floor(sqrt(ncol(data) - 1L)),
     write.forest = TRUE,
     seed = 1987,
@@ -121,35 +138,37 @@ if (src.mod.time > fit.mod.time) {
     save.memory = TRUE,
     respect.unordered.factors = "partition",
     num.threads = threads,
-    importance = "impurity")
+    importance = "permutation")
   save(fit, file = paste0(dir_prefix, "results/fit.RData"))
 }
 
 ## plot impurity importance
-beat.idx = grepl("beat", names(fit$variable.importance))
-plt = melt(fit$variable.importance[beat.idx])
-plt$beat = str_replace(row.names(plt), "beat_", "")
-plt$beat = factor(plt$beat, levels = unique(plt$beat)[order(plt$value)])
-p = ggplot(plt, aes(value, beat)) + geom_point() + theme_bw()
-ggsave(paste0(dir_prefix, "figures/beat_importance.png"), p, width = 6, height = 30)
+## beat.idx = grepl("beat", names(fit$variable.importance))
+## plt = melt(fit$variable.importance[beat.idx])
+## plt$beat = str_replace(row.names(plt), "beat_", "")
+## plt$beat = factor(plt$beat, levels = unique(plt$beat)[order(plt$value)])
+## p = ggplot(plt, aes(value, beat)) + geom_point() + theme_bw()
+## ggsave(paste0(dir_prefix, "figures/beat_importance.png"), p, width = 6, height = 30)
 
-plt = melt(fit$variable.importance[!beat.idx])
+## plt = melt(fit$variable.importance[!beat.idx])
+plt = melt(fit$variable.importance)
 plt$feature = row.names(plt)
-plt = bind_rows(data_frame("value" = sum(fit$variable.importance[beat.idx]),
-  "feature" = "Beat"), plt)
 p = ggplot(plt, aes(feature, value)) + geom_point() + theme_bw() +
   labs(y = "Importance (Impurity)", x = NULL)
-ggsave(paste0(dir_prefix, "figures/feature_importance.png"), p, width = 12, height = 8)
+ggsave(paste0(dir_prefix, "figures/crime_importance.png"), p, width = 12, height = 8)
+
+## imp = variable_importance(fit, c("TimeOfDay", "Month", "Year", "MonthLag", "WeekLag",
+##   "DayLag", "WeekDay"), FALSE, data = data)
 
 ## estimate and plot marginal effects
 estimateEffect = function(vars, p = .01, filename, interaction = TRUE) {
-  ## points = sapply(vars, function(x) na.omit(unique(data[[x]])), simplify = FALSE)
-  n = c(10, floor(p * nrow(data)))
+  points = sapply(vars, function(x) na.omit(unique(data[[x]])), simplify = FALSE)
+  n = c(NA, floor(p * nrow(data)))
   pd = partial_dependence(fit,
     vars = vars,
     n = n,
-    uniform = FALSE,
-    ## points = points,
+    uniform = TRUE,
+    points = points,
     data = data,
     interaction = interaction
   )
@@ -175,13 +194,13 @@ monthlag.effect = estimateEffect("MonthLag", filename = "monthlag_effect")
 ##   mutate(variable = factor(variable, levels = levels(variable)[order(prob)]))
 ## p = ggplot(beat.effect, aes(`TRUE`, variable)) + geom_point()
 
-ggplot(tod.effect, aes(TimeOfDay, `TRUE`)) + geom_point() +
-  labs(x = "Time of Day", y = "Marginal Prob of Burglary")
-ggplot(week.effect, aes(Weekday, `TRUE`)) + geom_point() +
-  labs(y = "Marginal Prob of Burglary")
-ggplot(week.tod.effect, aes(Weekday, `TRUE`)) + geom_point() +
-  facet_wrap(~ TimeOfDay) +
-  labs(y = "Marginal Prob of Burglary")
+## ggplot(tod.effect, aes(TimeOfDay, `TRUE`)) + geom_point() +
+##   labs(x = "Time of Day", y = "Marginal Prob of Burglary")
+## ggplot(week.effect, aes(Weekday, `TRUE`)) + geom_point() +
+##   labs(y = "Marginal Prob of Burglary")
+## ggplot(week.tod.effect, aes(Weekday, `TRUE`)) + geom_point() +
+##   facet_wrap(~ TimeOfDay) +
+##   labs(y = "Marginal Prob of Burglary")
 ggplot(month.effect, aes(Month, `TRUE`)) + geom_point() +
   labs(y = "Marginal Prob of Burglary")
 ggplot(month.tod.effect, aes(Month, `TRUE`)) + geom_point() +
@@ -195,6 +214,13 @@ ggplot(weeklag.effect, aes(WeekLag, `TRUE`)) + geom_point() +
   labs(x = "Previous Week Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary")
 ggplot(monthlag.effect, aes(MonthLag, `TRUE`)) + geom_point() +
   labs(x = "Previous Month Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary")
+
+grid.arrange(
+  ggplot(week.tod.effect, aes(Weekday, `TRUE`)) + geom_point() +
+    facet_wrap(~ TimeOfDay) +
+    labs(y = "Marginal Prob of Burglary"),
+)
+
 
 ## plot_pd(tod.effect)
 ## plot_pd(week.effect)
