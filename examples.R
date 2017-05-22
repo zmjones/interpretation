@@ -20,7 +20,7 @@ e = rnorm(n)
 Fn = F + e
 
 model = ctree(Fn ~ ., data.frame(x, w, v, z, Fn),
-  control = ctree_control(minprob = .4))
+  control = ctree_control(minprob = .4, mtry = 0))
 
 png("figures/tree.png", width = 1700, height = 1080, pointsize = 22)
 plot(model, type = "simple", inner_panel = node_inner(model, pval = FALSE))
@@ -28,20 +28,22 @@ dev.off()
 
 effects = list("x", "v", c("w", "x"), "z")
 effects.names = sapply(effects, function(x) paste0(x, collapse = ":"))
-## effects.var = list("x" = var(x),
-##   "v" = var(v^2),
-##   "w:x" = var(w * x),
-##   "z" = var(sin(z))
-## )
 
 fit = randomForest(data, Fn, ntree = 1000, mtry = 2)
 mp = lapply(effects, function(u) marginalPrediction(data, u, c(50, 2000), fit))
+variables = c("x", "v", "w", "z")
 mp = lapply(mp, function(x) {
   x$preds = x$preds - mean(Fn)
+  u = colnames(x)[colnames(x) != "preds"]
+  not.u = variables[!variables %in% u]
+  not.u.mu = sapply(not.u, function(x) mean(data[[x]]))
+  newdata = cbind(x[, u, with = FALSE], t(not.u.mu))
+  x$mean = predict(fit, newdata = newdata)
   x
 })
 names(mp) = effects.names
 mp$`w:x`$preds = mp$`w:x`$preds - mp$`x`$preds
+mp$`w:x`$mean = mp$`w:x`$mean - mp$`x`$mean
 pd = mp
 mp = rbindlist(mp, fill = TRUE, idcol = "effect")
 noiseless = lapply(effects, function(u)
@@ -54,7 +56,7 @@ mp$noiseless = do.call("c", noiseless)
 names(mp)[3] = "randomForest"
 mp$x = factor(mp$x, label = paste0("x = ", c(-1, 0, 1)))
 
-to.extract = c("randomForest", "noiseless")
+to.extract = c("randomForest", "noiseless")## , "mean")
 png("figures/pd.png", 12, 6, "in", res = 1000, pointsize = 20)
 grid.arrange(
   ggplot(melt(mp[effect == "x", c("x", to.extract), with = FALSE],

@@ -19,6 +19,7 @@ library(lubridate)
 library(zoo)
 library(tidyr)
 library(stringr)
+library(gridExtra)
 
 path <- unlist(str_split(getwd(), "/"))
 dir_prefix <- ifelse(path[length(path)] == "src", "../", "./")
@@ -74,7 +75,7 @@ if (src.mod.time > data.mod.time) {
       Week = week(Date)) %>%
     group_by(Beat) %>%
     mutate(
-      mutate(OneLag = lag(ifelse(Incidence, 1, 0), n = 1),
+      mutate(OneLag = lag(ifelse(Incidence, 1, 0), n = 1)),
       TwoLag = lag(OneLag, n = 1),
       DayLag = OneLag + TwoLag,
       MonthLag = rollapply(DayLag, width = 30 * 2, FUN = sum, fill = NA),
@@ -98,12 +99,11 @@ if (src.mod.time > data.mod.time) {
       Beat = as.factor(Beat),
       DayLag = NULL, WeekLag = NULL, MonthLag = NULL) %>%
     group_by(Beat) %>%
-    mutate(OneLag = lag(ifelse(Incidence, 1, 0), n = 1),
+    mutate(OneLag = lag(ifelse(Incidence == "TRUE", 1, 0), n = 1),
       TwoLag = lag(OneLag, n = 1),
       DayLag = OneLag + TwoLag,
       MonthLag = rollapply(DayLag, width = 30 * 2, FUN = sum, fill = NA),
-      WeekLag = rollapply(DayLag, width = 7 * 2, FUN = sum, fill = NA),
-      OneLag = NULL, TwoLag = NULL)
+      WeekLag = rollapply(DayLag, width = 7 * 2, FUN = sum, fill = NA))
 }
 
 data$OneLag = data$TwoLag = NULL
@@ -116,13 +116,11 @@ beats = as.character(unique(data$Beat))
 beats = paste0("beat_", beats)
 
 data = data %>%
-  ## bind_cols(setnames(setDF(lapply(levels(data$Beat),
-  ##   function(x) as.integer(data$Beat == x))), paste0("beat_", levels(data$Beat)))) %>%
+  bind_cols(setnames(setDF(lapply(levels(data$Beat),
+    function(x) as.integer(data$Beat == x))), paste0("beat_", levels(data$Beat)))) %>%
   na.omit() %>%
   select(-one_of("Date", "Day", "Week", "Beat")) %>%  
   as.data.frame()
-
-data$Incidence = as.factor(data$Incidence)
 
 if (src.mod.time > fit.mod.time) {
   load(paste0(dir_prefix, "results/fit.RData"))
@@ -142,8 +140,8 @@ if (src.mod.time > fit.mod.time) {
   save(fit, file = paste0(dir_prefix, "results/fit.RData"))
 }
 
-## plot impurity importance
-## beat.idx = grepl("beat", names(fit$variable.importance))
+## plot permutation importance
+beat.idx = grepl("beat", names(fit$variable.importance))
 ## plt = melt(fit$variable.importance[beat.idx])
 ## plt$beat = str_replace(row.names(plt), "beat_", "")
 ## plt$beat = factor(plt$beat, levels = unique(plt$beat)[order(plt$value)])
@@ -153,9 +151,9 @@ if (src.mod.time > fit.mod.time) {
 ## plt = melt(fit$variable.importance[!beat.idx])
 plt = melt(fit$variable.importance)
 plt$feature = row.names(plt)
-p = ggplot(plt, aes(feature, value)) + geom_point() + theme_bw() +
-  labs(y = "Importance (Impurity)", x = NULL)
-ggsave(paste0(dir_prefix, "figures/crime_importance.png"), p, width = 12, height = 8)
+p = ggplot(plt, aes(feature, value)) + geom_point() +
+  labs(y = "Permutation Importance", x = NULL)
+ggsave(paste0(dir_prefix, "figures/pi_crime.png"), p, width = 10, height = 5)
 
 ## imp = variable_importance(fit, c("TimeOfDay", "Month", "Year", "MonthLag", "WeekLag",
 ##   "DayLag", "WeekDay"), FALSE, data = data)
@@ -194,37 +192,37 @@ monthlag.effect = estimateEffect("MonthLag", filename = "monthlag_effect")
 ##   mutate(variable = factor(variable, levels = levels(variable)[order(prob)]))
 ## p = ggplot(beat.effect, aes(`TRUE`, variable)) + geom_point()
 
-## ggplot(tod.effect, aes(TimeOfDay, `TRUE`)) + geom_point() +
-##   labs(x = "Time of Day", y = "Marginal Prob of Burglary")
-## ggplot(week.effect, aes(Weekday, `TRUE`)) + geom_point() +
-##   labs(y = "Marginal Prob of Burglary")
-## ggplot(week.tod.effect, aes(Weekday, `TRUE`)) + geom_point() +
-##   facet_wrap(~ TimeOfDay) +
-##   labs(y = "Marginal Prob of Burglary")
-ggplot(month.effect, aes(Month, `TRUE`)) + geom_point() +
+ggplot(tod.effect, aes(TimeOfDay, `1`)) + geom_point() +
+  labs(x = "Time of Day", y = "Marginal Prob of Burglary")
+ggplot(week.effect, aes(Weekday, `1`)) + geom_point() +
   labs(y = "Marginal Prob of Burglary")
-ggplot(month.tod.effect, aes(Month, `TRUE`)) + geom_point() +
+ggplot(week.tod.effect, aes(Weekday, `1`)) + geom_point() +
   facet_wrap(~ TimeOfDay) +
   labs(y = "Marginal Prob of Burglary")
-ggplot(year.effect, aes(Year, `TRUE`)) + geom_point() +
+ggplot(month.effect, aes(Month, `1`)) + geom_point() +
   labs(y = "Marginal Prob of Burglary")
-ggplot(daylag.effect, aes(DayLag, `TRUE`)) + geom_point() +
+ggplot(month.tod.effect, aes(Month, `1`)) + geom_point() +
+  facet_wrap(~ TimeOfDay) +
+  labs(y = "Marginal Prob of Burglary")
+ggplot(year.effect, aes(Year, `1`)) + geom_point() +
+  labs(y = "Marginal Prob of Burglary")
+ggplot(daylag.effect, aes(DayLag, `1`)) + geom_point() +
   labs(x = "Previous Day Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary")
-ggplot(weeklag.effect, aes(WeekLag, `TRUE`)) + geom_point() +
+ggplot(weeklag.effect, aes(WeekLag, `1`)) + geom_point() +
   labs(x = "Previous Week Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary")
-ggplot(monthlag.effect, aes(MonthLag, `TRUE`)) + geom_point() +
+ggplot(monthlag.effect, aes(MonthLag, `1`)) + geom_point() +
   labs(x = "Previous Month Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary")
 
+png("figures/pd_crime.png", 12, 8, "in", res = 1000, pointsize = 20)
 grid.arrange(
-  ggplot(week.tod.effect, aes(Weekday, `TRUE`)) + geom_point() +
-    facet_wrap(~ TimeOfDay) +
+  ggplot(tod.effect, aes(TimeOfDay, `1`)) + geom_point() +
+    labs(x = "Time of Day", y = "Marginal Prob of Burglary"),
+  ggplot(week.effect, aes(Weekday, `1`)) + geom_point() +
     labs(y = "Marginal Prob of Burglary"),
+  ggplot(weeklag.effect, aes(WeekLag, `1`)) + geom_point() +
+    labs(x = "Previous Week Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary"),
+  ggplot(monthlag.effect, aes(MonthLag, `1`)) + geom_point() +
+    labs(x = "Previous Month Total Number of Reported Burglaries by Police Beat", y = "Marginal Prob of Burglary"),
+  nrow = 2
 )
-
-
-## plot_pd(tod.effect)
-## plot_pd(week.effect)
-## plot_pd(week.tod.effect, facet = "TimeOfDay")
-## plot_pd(month.effect)
-## plot_pd(month.tod.effect, facet = "TimeOfDay")
-## plot_pd(year.effect)
+dev.off()
