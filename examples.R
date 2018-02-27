@@ -30,24 +30,33 @@ effects = list("x", "v", c("w", "x"), "z")
 effects.names = sapply(effects, function(x) paste0(x, collapse = ":"))
 
 fit = randomForest(data, Fn, ntree = 1000, mtry = 2)
-mp = lapply(effects, function(u) marginalPrediction(data, u, c(50, 2000), fit))
+fit.svm = gbm(Fn ~ x + v + w + z, "gaussian", data = data.frame(Fn, data),
+  interaction.depth = 2, n.trees = 1000, shrinkage = .1)
+fit.svm = lm(Fn ~ x * w + poly(v, 2) + poly(z, 3), data = data.frame(Fn, data))
+
+mp = lapply(effects, function(u) cbind(marginalPrediction(data, u, c(25, 100), fit),
+  "svm" = marginalPrediction(data, u, c(25, 100), fit.svm)$preds - mean(Fn)))## ,
+    ## predict.fun = function(object, newdata)
+    ##   predict(object, newdata = newdata, n.trees = 1000))$preds))
 variables = c("x", "v", "w", "z")
 mp = lapply(mp, function(x) {
   x$preds = x$preds - mean(Fn)
-  u = colnames(x)[colnames(x) != "preds"]
-  not.u = variables[!variables %in% u]
-  not.u.mu = sapply(not.u, function(x) mean(data[[x]]))
-  newdata = cbind(x[, u, with = FALSE], t(not.u.mu))
-  x$mean = predict(fit, newdata = newdata)
+  ## x$svm = x$svm - mean(Fn)
+  ## u = colnames(x)[colnames(x) != "preds"]
+  ## not.u = variables[!variables %in% u]
+  ## not.u.mu = sapply(not.u, function(x) mean(data[[x]]))
+  ## newdata = cbind(x[, u, with = FALSE], t(not.u.mu))
+  ## x$mean = predict(fit.svm, newdata = newdata)
   x
 })
 names(mp) = effects.names
 mp$`w:x`$preds = mp$`w:x`$preds - mp$`x`$preds
 mp$`w:x`$mean = mp$`w:x`$mean - mp$`x`$mean
+mp$`w:x`$svm = mp$`w:x`$svm - mp$`x`$svm
 pd = mp
 mp = rbindlist(mp, fill = TRUE, idcol = "effect")
 noiseless = lapply(effects, function(u)
-  marginalPrediction(data, u, c(50, 2000), NULL,
+  marginalPrediction(data, u, c(25, 100), NULL,
     predict.fun = predict.fun)$preds - mean(Fn))
 names(noiseless) = effects.names
 noiseless$`w:x` = noiseless$`w:x` - noiseless$`x`
@@ -56,7 +65,7 @@ mp$noiseless = do.call("c", noiseless)
 names(mp)[3] = "randomForest"
 mp$x = factor(mp$x, label = paste0("x = ", c(-1, 0, 1)))
 
-to.extract = c("randomForest", "noiseless")## , "mean")
+to.extract = c("randomForest", "noiseless", "mean", "svm")
 png("figures/pd.png", 12, 6, "in", res = 1000, pointsize = 20)
 grid.arrange(
   ggplot(melt(mp[effect == "x", c("x", to.extract), with = FALSE],
@@ -138,4 +147,3 @@ ggsave("figures/int.png", width = 8, height = 5)
 ## ggplot(fa[effect == "x", ], aes(x, f)) + geom_line() + geom_point()
 ## ggplot(fa[effect == "y", ], aes(y, f)) + geom_line() + geom_point()
 ## ggplot(fa[effect == "x:y", ], aes(x, y, fill = f)) + geom_raster()
-
