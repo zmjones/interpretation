@@ -1,0 +1,73 @@
+the methods that are most commonly used in political science are very simple parametric models. models that are linear in the parameters like generalized linear models. mostly what we do with these models is interpret the parameters in light of our expectations or theories about the world. and the way we try to choose between models is via goodness of fit, although we generally do this half-heartedly.
+
+we *know* that the processes we are trying to model are complicated. and i don't think anybody *really* believes the functional forms that we assume in our empirical models. the empirical models we fit are not generally wholly determined by theory, nor are they designed to minimize out-of-sample prediction error, and they depend heavily on a range of choices we have to make about our model. i don't think this is something that anyone really enjoys making these decisions.
+
+what this means is that the your results are heavily dependent on your assumed model. this makes it harder to discover when your model is a bad and to uncover data problems (because the model assumed is so smooth). it also generally means that our prediction errors are larger than they could be.
+
+there is a way to avoid this though, which is by making much weaker assumptions about functional form. we should use things from machine learning where the goal is out-of-sample goodness of fit which is accomplished by tuning the model's complexity automatically to minimize out-of-sample error. the problem with these methods is that they are generally uninterpretable. i have written a bunch of software that implements methods that make any method interpretable.
+
+of course beck, king, and zeng made this point in 2001. i'm just trying to get what they first brought up to stick and for the default methods in our field to actually change.
+
+to remind you, they published a paper that said that a neural network could predict international war out-of-sample better than a logit: really just saying that the process that produces international war is complicated. the argument that they presented, while compelling, didn't focus on making the point that this is a pervasive thing.
+
+they give a method for interpreting the neural network which doesn't apply to all ml type models, they offered no software anyone could use to do what they'd done, and after their short exchange with de Marchi, Gelpi, and Grynaviski, they didn't really publish any more papers on the topic.
+
+so my contributions such as they are include solutions to these problems in an attempt to change our empirical modeling status quo. i've written several packages that make it easy for people to fit an arbitrary model, conventional or an ml model, and get interpretable output. i think one of the presenters actually used one of them. that is how long i've been working on this paper.
+
+i've also tried to explain the theoretical basis for this argument. i think that there are good theoretical reasons to expect social data to generally be quite complex in a variety of ways, and it is correspondingly sensible to use methods capable of modelling complex processes without requiring that we have a fairly reliable understanding of how a phenomenon works already. which is a condition that i believe we rarely satisfy.
+
+i've also been publishing applications of these methods and will continue to do so. this way you can cite me which is oh so very convenient and avoid having to make this point everytime you use a method. also hopefully people are just getting more used to the idea of doing this.
+
+ok so what exactly is machine learning? this is really an arbitrary distinction like all disciplinary distinctions or subfields. i think it is a useful distinction here though so i'm defining conventional methods as those for which the hypothesis space has a fixed dimension. what i mean by hypothesis space is the space of possible models your method could learn. for say a simple linear regression where you have an intercept and slope you have two parameters and either of them could be any real number, so the hypothesis space has 2 dimensions.
+
+a machine learning method doesn't fix this dimension up front and determines it in the course of fitting the model. this allows this class of methods to give you complex models when you have complex data or just a lot of data, and simpler models otherwise.
+
+theoretically what i am saying is that we should be more focused on reducing excess error. so in this figure we have h which is the hypothesis. within it are all of the possible models we could get with some some possible sample data.
+
+the f outside the hypothesis which is the "true" model. h-star is the model in the hypothesis space that is closest to f. and f-hat is the best possible model in the hypothesis given the data you actually have.
+
+approximation error is called this because it is the best-case scenario fixing your model (a possible model in the hypothesis space). estimation error is what conventional methods do well, because they are generally so simple. despite all the time we spend talking about unbiasedness in our methods classes basically all of the methods commonly used have, in practice large bias and small variance.
+
+basically what i am saying is that i think in reality approximation error is much much bigger than estimation error. and even if i'm wrong it still makes sense to minimize excess error, which is the actual error we make, rather than just estimation error.
+
+so machine learning is great. everybody loves it. the problem is that searching through these bigger hypothesis space sometimes entails optimization methods that will make output look uninterpretable even if the underlying model learned *is* simple. i think an easy way to see this is with regression trees. if you had data from a linear relationship and you fit a regression tree to it, as the tree's size increased it would get increasingly difficult to understand, whereas if you actually fit a linear model to it you can describe it very simply. the problems of course aren't linear all the time (not often really?) so we can't just fit the right model. this is the point that de marchi et. al. don't seem to get. their "well specified" logit isn't well specified. sure there are theories which people have advanced about why international war occurs but we haven't exactly found the laws of international politics. so sure if we just knew the correct model that would be nice. but that is fantasy land. we don't and won't. so our choice is to do intuitiive data mining with methods that weren't designed for that, which is what we've been doing for as long as there has been quantitative political science, or we can use and develop methods designed to do the things we are actually doing.
+
+so before i talk about how to interpret machine learning output we have to decide what we want to learn from the model in the first place.
+
+from what i've seen there are a few sort of separate questions we ask.
+
+we ask a lot of feature/covariate importance questions. i think the tractable notion of importance with observational data is "useful in predicting y out-of-sample." this i think comports with how we often use hypothesis tests and p-values, which is bad... those things don't do a good job answering those questions with our data.
+
+another common question is what the relationship between a covariate or group of covariates and the outcome is. with a linear model that is just a single number but when there are nonlinear components then often this means a line plot or a heatmap/contour plot, whatever...
+
+the last thing we often ask about is whether what we've taken from our models is reliable. that is what i am working on now.
+
+so one of the simplest ways to rank/score covariates in terms of their predictive importance with a model is to break the relationship between the covariates and the outcome by permuting them just like you would with a permutation test.
+
+so imagine we are just trying to estimate a line. suppose the true slope of that line is 1 and what we observe are points randomly distributed around that line. if we estimated the line from that we'd probably get a slope close to 1. if we shuffled our sample data randomly the model's output would be also totally random. so obviously the model is now terrible. now imagine the slope we estimated is 0. permuting the data doesn't matter because the model's predictions don't depend on that covariate at all. basically permutation importance does this is a whole bunch of time and averages the output with any model that generates predictions.
+
+so in the math here U is the subset of predictors we are estimating the importance of f-hat is the model we fit, the pi means 'permuted', the L is the loss function, and the summation is over the number of permutations.
+
+so to illustrate how this works i am working with political violence data from a paper about regime type that i published with yon lupu. in that paper we are making the point that it is a strange thing to try to study the functional form of the relationship between regime type and political violence by making a whole bunch of real strong assumptions about what it looks like. it's a bit crazy but polity is still the most used measure of regime type. two patterns about its use that are especially disturbing are that it usually includes direct measures of political violence, and the other disturbing thing about its use is that categories treated as "missing" are very strongly related to political violence.
+
+so this graph shoes the permutation importance of the features that yon and i used with one important difference. i included those missing categories which encode interruption, which is when a foreign power occupies your state, anarchy or interregnum, and transition, when the government of the country is changing its form. clearly these categories are anything but missing at any sort of random. this figure shows the marginal predictive importance of each of the covariates. but feature importance is kind of boring since it can't really tell you anything interesting aside from this score/rank.
+
+partial dependence is a simple method for estimating the functional form of a relationship between features and the model's output. it is essentially a minor generalization of the average marginal effect which skips derivative estimation.
+
+basically what you do is you come up with or let my software generate a set of values that represent them. then taking the observed values of your other variables or a subsample thereof if you have a lot of data. then combine that with every row of your grid, that is every possible combination of the variables we care about.
+
+then you can take this design matrix and evalute your fitted model on it and average or otherwise aggregate over the training data. just monte-carlo integration. setting variables to their means or similar is not a good idea.
+
+although this is a very simple idea which was as far as i can tell first discussed in this context by david friedman in 2001 it is pretty handy. this graph shows shows the partial dependence of a version of x-polity, which is polity with the main component of it that directly codes violence, treated as unordered with the "missing" categories included as codes just like any other. clearly the model thinks the relationship between these categories is pretty strong across all of these different types of political violence. in some cases the variation across these categories is so large that the entire normal range of polity appears to not matter at all. clearly this means that these categories can't be treated as just "missing."
+
+we can also modify partial dependence to do interaction detection. specifically we can use it to estimate how much the estimate of partial dependence of one covariate depends on the values of the others. so here we can see that some of the estimates of how x-polity is related to political violence depends strongly on other variables. by looking at the important covariates from the previous graph we might get some ideas about what other things are going to be important or possibly strong interactions. obviously if we have theoretical ideas we can use that as our guide as to what to estimate.
+
+this shows how the percent of the population excluded from political power as measured by cederman et. al. within levels of x-polity. we can see that for code -66 which is states occupied by a foreign power the number of terrorist events is really large in states with very little or no politically exclusion.
+
+hmmmm ok. there are three states that drive this. bosnia, iraq, and afghanistan. well that is good to know. ethnic cleansing i guess helps reduce your excluded population score. i wonder what people treating polity as missing and deleting it or guessing a value for it with multiple imputation does to our results. something we shouldn't have done to it i'd guess.
+
+these sort of methods are equally suited to finding theory problems. far better suited than nhst. we should do things like this less than this older style of data analysis.
+
+so as i mentioned the next thing i'm working on is honest reliability assessment which i think fits well with this. i'm also working on making the software better. if you report a bug or make a reasonable feature request i try to do it quickly and have been doing so for a few years now.
+
+check out my website/github for papers and software with all the details.
